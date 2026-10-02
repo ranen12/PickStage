@@ -1,0 +1,14 @@
+
+node_modules/
+
+# 빌드 결과와 테스트 결과
+dist/
+coverage/
+
+# DB 접속 주소 등 비밀 설정
+.env
+.env.*
+!.env.example
+
+# 로그
+*.log
