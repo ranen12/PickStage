@@ -46,6 +46,8 @@
 - [x] sonner
 
 ## Adding a New Component
+- [x] breadcrumb
+- [x] toggle-group
 
 새로운 shadcn/ui 컴포넌트를 추가할 경우 이 문서에도 목록을 업데이트합니다.
 
