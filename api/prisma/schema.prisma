@@ -1,0 +1,126 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StageCategory {
+  MUSICAL
+  PLAY
+  CONCERT
+  CLASSICS
+  EXHIBITION
+}
+
+enum ViewingGrade {
+  ALL
+  MINORS_7
+  MINORS_12
+  MINORS_15
+  ADULT_ONLY
+}
+
+//공연
+model Stage {
+  id          Int             @id @default(autoincrement())
+  title       String          @db.VarChar(255)
+  category    StageCategory
+  startDate   DateTime        @db.Date
+  endDate     DateTime        @db.Date
+  posterUrl   String?         @db.VarChar(1000)
+  price       Int
+  runningTime Int
+  rating      ViewingGrade
+  description String?         @db.Text
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3) //소수점 3자리 밀리초까지
+  updatedAt   DateTime        @default(now()) @updatedAt @db.Timestamptz(3)
+  schedules   StageSchedule[] //공연1 : 회차N(StageSchedule)
+}
+
+//공연회차
+//공연1: 회차N 관계
+model StageSchedule {
+  id            Int            @id @default(autoincrement())
+  stageId       Int //FK, 공연의 PK값을 저장한다.
+  startAt       DateTime       @db.Timestamptz(3)
+  endAt         DateTime       @db.Timestamptz(3)
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  stage         Stage          @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  scheduleSeats ScheduleSeat[] //이 회차에 속한 좌석 목록
+  reservations  Reservation[] //이 회차에 예약목록 관계
+}
+
+//Stage에 연결할것이고, @relation 은 어느 필드끼리 연결할지 지정한다.
+//stageId 필드를 fk로, 래퍼런스(상대모델)에 id에 연결할것이다(stage.id) 
+//fk 가 있는 모델에서 @relation을 표기한다.
+//onDelete는 연결된 회차가 있으면 공연 삭제를 막는다
+
+//좌석
+model Seat {
+  id            Int            @id @default(autoincrement())
+  venue_name    String         @default("Main Hall") @db.VarChar(100)
+  seatCode      String         @unique @db.VarChar(50)
+  grade         String         @default("STANDARD") @db.VarChar(50)
+  rowName       String         @db.VarChar(10)
+  seatNumber    Int
+  scheduleSeats ScheduleSeat[] //이 기본 좌석이 사용되는 회차별 좌석 목록
+}
+
+enum SeatStatus {
+  AVAILABLE //예매가능
+  HOLD // 임시 선점
+  SOLD // 예매완료
+  BLOCKED //판매중지
+}
+
+model ScheduleSeat {
+  id         Int        @id @default(autoincrement())
+  scheduleId Int //FK 어느 회차인가
+  seatId     Int //FK 어느 기본좌석인가
+  seatStatus SeatStatus @default(AVAILABLE)
+
+  holderId      String?   @db.VarChar(100)
+  holdExpiresAt DateTime? @db.Timestamptz(3)
+
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  //회차와 연결
+  schedule StageSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+
+  //기본 좌석과 연결
+  seat Seat @relation(fields: [seatId], references: [id], onDelete: Restrict)
+
+  reservationId Int? //FK 예매 id, SOLD 상태만 값 존재
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  //예약과의 관계 설정 FK
+
+  //같은 회차에 같은 기본 좌석이 두번 생성되면 x
+  @@unique([scheduleId, seatId])
+}
+
+enum ReservationStatus {
+  CONFIRMED // 예매완료
+  CANCELLED // 예매취소
+}
+
+model Reservation {
+  id                Int               @id @default(autoincrement())
+  scheduleId        Int //예약한 공연 회차
+  reservationNo     String            @unique @default(uuid()) @db.VarChar(50)
+  customerName      String            @db.VarChar(100)
+  customerPhone     String            @db.VarChar(20)
+  totalAmount       Int //총 결제금액
+  reservationStatus ReservationStatus @default(CONFIRMED)
+  createdAt         DateTime          @default(now()) @db.Timestamptz(3)
+  schedule          StageSchedule     @relation(fields: [scheduleId], references: [id], onDelete: Restrict) //예약한건은 회차 하나에 연결
+  scheduleSeats     ScheduleSeat[] //예약 한건에 여러 좌석
+}
