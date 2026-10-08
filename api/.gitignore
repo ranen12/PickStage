@@ -11,5 +11,6 @@ coverage/
 !.env.example
 
 # 로그
+log/
 *.log
 /generated/prisma
