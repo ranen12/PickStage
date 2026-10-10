@@ -19,7 +19,7 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, items }: PageHeaderProps) {
   return (
-    <div className="px-4 py-6">
+    <div className="px-4 py-6 border-b-1 border-b-gray-200">
       <h2 className="text-2xl font-bold mb-2">{title}</h2>
       <Breadcrumb>
         <BreadcrumbList>
