@@ -4,6 +4,8 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { ScheduleSeatsModule } from './schedule-seats/schedule-seats.module';
+import { GuestController } from './guest/guest.controller';
 
 @Module({
   imports: [
@@ -12,8 +14,9 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
     }),
     PrismaModule,
     CloudinaryModule,
+    ScheduleSeatsModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, GuestController],
   providers: [AppService],
 })
 export class AppModule {}
