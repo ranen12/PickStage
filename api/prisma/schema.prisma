@@ -67,14 +67,14 @@ model StageSchedule {
 //좌석
 model Seat {
   id            Int            @id @default(autoincrement())
-  venue_name    String         @default("Main Hall") @db.VarChar(100)
+  venueName     String         @default("Main Hall") @db.VarChar(100)
   seatCode      String         @db.VarChar(50)
   grade         String         @default("STANDARD") @db.VarChar(50)
   seatNumber    Int
   rowName       String         @db.VarChar(10)
   scheduleSeats ScheduleSeat[] //이 기본 좌석이 사용되는 회차별 좌석 목록
 
-  @@unique([venue_name, seatCode])
+  @@unique([venueName, seatCode])
 }
 
 enum SeatStatus {
