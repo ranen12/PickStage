@@ -9,8 +9,8 @@ export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
-    { name: "공연 등록", href: "/stages/new" },
-    { name: "공연", href: "/stages/list" },
+    { name: "공연 등록(관리자)", href: "/admin" },
+    { name: "공연 목록", href: "/stages/list" },
     { name: "예매 내역 조회", href: "/" },
   ];
 
