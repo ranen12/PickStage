@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 async function main() {
   // 1. 이미 만들어 둔 기본 좌석을 가져옵니다.
   const seats = await prisma.seat.findMany({
-    where: { venue_name: 'PickStage Hall' },
+    where: { venueName: 'PickStage Hall' },
   });
 
   if (seats.length === 0) {
@@ -41,7 +41,7 @@ async function main() {
   await prisma.scheduleSeat.createMany({
     data: seats.map((seat) => ({
       scheduleId: schedule.id, // 모두 같은 회차
-      seatId: seat.id,         // 각각의 기본 좌석
+      seatId: seat.id, // 각각의 기본 좌석
       seatStatus: 'AVAILABLE',
     })),
   });
@@ -55,4 +55,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

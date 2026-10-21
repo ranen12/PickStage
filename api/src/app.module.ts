@@ -6,6 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { ScheduleSeatsModule } from './schedule-seats/schedule-seats.module';
 import { GuestController } from './guest/guest.controller';
+import { StageModule } from './stage/stage.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { GuestController } from './guest/guest.controller';
     PrismaModule,
     CloudinaryModule,
     ScheduleSeatsModule,
+    StageModule,
   ],
   controllers: [AppController, GuestController],
   providers: [AppService],

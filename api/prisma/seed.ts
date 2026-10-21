@@ -8,7 +8,7 @@ async function main() {
       const seatNumber = index + 1;
 
       return {
-        venue_name: 'PickStage Hall',
+        venueName: 'PickStage Hall',
         seatCode: `${rowName}${seatNumber}`,
         grade: 'S',
         seatNumber,
