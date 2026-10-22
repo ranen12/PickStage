@@ -7,13 +7,18 @@ import { ValidationPipe } from '@nestjs/common/pipes/validation.pipe';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.useGlobalPipes(new ValidationPipe({whitelist: true, forbidNonWhitelisted: true, transform: true,}),);
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
-  
   //.env에서 서버의 쿠키 서명용 비밀키를 가져온다.
   const cookieSecret = process.env.COOKIE_SECRET;
 
-  if(!cookieSecret) {
+  if (!cookieSecret) {
     throw new Error('COOKIE_SECRET is not defined');
   }
 
