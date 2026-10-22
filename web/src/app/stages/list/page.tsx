@@ -12,7 +12,10 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
-export default function Stages() {
+export default async function Stages() {
+
+
+
   return (
     <div className="flex flex-col gap-4 px-4 py-8">
       <div className="flex gap-2 justify-between items-center ">

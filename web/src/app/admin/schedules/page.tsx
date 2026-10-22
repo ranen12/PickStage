@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,6 +45,8 @@ function formatKoreanDate(date: Date) {
 }
 
 export default function NewStageSchedulesPage() {
+  const params = useParams<{ id: string }>();
+  const stageId = params.id;
 
   const [month, setMonth] = useState(new Date(2026, 5, 1));
   const [selectedDate, setSelectedDate] = useState(new Date(2026, 5, 15));
