@@ -29,7 +29,7 @@ export type StageScheduleResponse = {
   createdAt: string;
 };
 
-export type StageListResponse = {
+export type StageListOne = {
   id: number;
   title: string;
   category: StageCategoryKey;
@@ -45,4 +45,12 @@ export type StageListResponse = {
   _count: {
     schedules: number;
   };
+}
+
+export type StageListResponse = {
+  data: StageListOne[],
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };
