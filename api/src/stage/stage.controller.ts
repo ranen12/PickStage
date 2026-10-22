@@ -9,10 +9,12 @@ import {
   ParseIntPipe,
   UploadedFile,
   UseInterceptors,
+  Query,
 } from '@nestjs/common';
 import { StageService } from './stage.service';
 import { CreateStageDto } from './dto/create-stage.dto';
 import { UpdateStageDto } from './dto/update-stage.dto';
+import { PageRequestDto } from './dto/page-request.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('stage')
@@ -30,9 +32,9 @@ export class StageController {
   }
 
   @Get()
-  findAll() {
+  findAll(@Query() query: PageRequestDto) {
     console.log('StageController.findAll 호출됨');
-    return this.stageService.findAll();
+    return this.stageService.findAll(query);
   }
 
   @Get(':id')
