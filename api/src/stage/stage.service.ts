@@ -3,14 +3,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { v2 as cloudinary } from 'cloudinary';
-import type { Express } from 'express';
 import 'multer';
 import { logger } from 'src/config/logger';
 import { parseStageDate } from 'src/config/formatDate';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateStageDto } from './dto/create-stage.dto';
 import { UpdateStageDto } from './dto/update-stage.dto';
+import { PageRequestDto } from './dto/page-request.dto';
 
 @Injectable()
 export class StageService {
@@ -53,18 +54,49 @@ export class StageService {
    * 공연 리스트
    * @returns
    */
-  async findAll() {
+  async findAll(query: PageRequestDto) {
     logger.info(`stageService findAll started.`);
-    const stageLists = await this.prisma.stage.findMany({
-      include: {
-        _count: {
-          select: { schedules: true },
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+
+    const where: Prisma.StageWhereInput = {
+      ...(query.category?.length ? { category: { in: query.category } } : {}),
+      ...(query.rating ? { rating: query.rating } : {}),
+      ...(query.scheduleStatus === 'missing'
+        ? { schedules: { none: {} } }
+        : {}),
+      ...(query.scheduleStatus === 'registered'
+        ? { schedules: { some: {} } }
+        : {}),
+    };
+
+    const orderBy: Prisma.StageOrderByWithRelationInput =
+      query.sort === 'name' ? { title: 'asc' } : { createdAt: 'desc' };
+
+    const [data, total] = await Promise.all([
+      this.prisma.stage.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          _count: {
+            select: { schedules: true },
+          },
         },
-      },
-    });
-    logger.debug(stageLists);
+      }),
+      this.prisma.stage.count({ where }),
+    ]);
+
     logger.info(`stageService findAll ended.`);
-    return stageLists;
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   /**
