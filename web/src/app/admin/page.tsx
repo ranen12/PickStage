@@ -8,11 +8,22 @@ import { StageListResponse } from '@/types/api/apiStage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
+
+type ScheduleStatusType = 'all' | 'registered' | 'missing';
 
 type Props = {
   searchParams: Promise<{
     sort?: string;
-    missingSchedules?: string;
+    scheduleStatus?: string;
     page?: string;
   }>;
 };
@@ -23,59 +34,83 @@ const DEFAULT_IMAGE = 'https://placehold.co/400x600/png';
 export default async function AdminList({ searchParams }: Props) {
   const params = await searchParams;
   const sort = params.sort === 'name' ? 'name' : 'latest';
-  const onlyMissingSchedules = params.missingSchedules === 'true';
+  const scheduleStatus : ScheduleStatusType =
+    params.scheduleStatus === 'registered' ||
+    params.scheduleStatus === 'missing'
+      ? params.scheduleStatus
+      : 'all';
   const requestedPage = Math.max(1, Number(params.page) || 1);
 
-  const stages = await apiFetch<StageListResponse[]>({
-    path: '/stage',
+  const apiQuery = new URLSearchParams({
+    sort,
+    page: String(requestedPage),
+    limit: String(PAGE_SIZE),
   });
 
-  const filteredStages = stages.filter(
-    (stage) => !onlyMissingSchedules || stage._count.schedules === 0,
-  );
+  if (scheduleStatus !== 'all') {
+    apiQuery.set('scheduleStatus', scheduleStatus);
+  }
 
-  const sortedStages = [...filteredStages].sort((a, b) =>
-    sort === 'name'
-      ? a.title.localeCompare(b.title, 'ko')
-      : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  const stages = await apiFetch<StageListResponse>({
+    path: `/stage?${apiQuery.toString()}`,
+  });
 
-  const totalPages = Math.max(1, Math.ceil(sortedStages.length / PAGE_SIZE));
-  const currentPage = Math.min(requestedPage, totalPages);
-  const pageStages = sortedStages.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
+  const currentPage = stages.page;
+  const totalPages = stages.totalPages;
+  const pageStages = stages.data;
+
+  const paginationItems: (number | 'left-ellipsis' | 'right-ellipsis')[] =
+    totalPages <= 5
+      ? Array.from({ length: totalPages }, (_, index) => index + 1)
+      : currentPage <= 3
+        ? [1, 2, 3, 4, 'right-ellipsis', totalPages]
+        : currentPage >= totalPages - 2
+          ? [
+              1,
+              'left-ellipsis',
+              totalPages - 3,
+              totalPages - 2,
+              totalPages - 1,
+              totalPages,
+            ]
+          : [
+              1,
+              'left-ellipsis',
+              currentPage - 1,
+              currentPage,
+              currentPage + 1,
+              'right-ellipsis',
+              totalPages,
+            ];
 
   function makeUrl(
     options: {
-      sort?: string;
-      missingSchedules?: boolean;
+      sort?: 'latest' | 'name';
+      scheduleStatus?: ScheduleStatusType;
       page?: number;
     } = {},
   ) {
     const nextSort = options.sort ?? sort;
-    const nextMissing = options.missingSchedules ?? onlyMissingSchedules;
+    const nextStatus = options.scheduleStatus ?? scheduleStatus;
     const nextPage = options.page ?? 1;
 
     const query = new URLSearchParams();
     query.set('sort', nextSort);
-
-    if (nextMissing) {
-      query.set('missingSchedules', 'true');
-    }
-
     query.set('page', String(nextPage));
+
+    if(nextStatus !== 'all'){
+      query.set('scheduleStatus', nextStatus);
+    }
     return `?${query.toString()}`;
   }
 
   const sortLinkClass = (active: boolean) =>
-  [
-    'inline-flex h-9 items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors',
-    active
-      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-      : 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-  ].join(' ');
+    [
+      'inline-flex h-9 items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors',
+      active
+        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+        : 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+    ].join(' ');
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-8">
@@ -83,9 +118,7 @@ export default async function AdminList({ searchParams }: Props) {
         <div>
           <h1 className="text-2xl font-bold">공연 관리</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {onlyMissingSchedules
-              ? `스케줄 미등록 공연 ${filteredStages.length}개`
-              : `공연 ${stages.length}개`}
+            공연은 총 <strong>{stages.total}</strong>개 있습니다
           </p>
         </div>
 
@@ -114,16 +147,15 @@ export default async function AdminList({ searchParams }: Props) {
           </Link>
         </div>
 
-          <Link
-            href={makeUrl({
-              missingSchedules: !onlyMissingSchedules,
-            })}
-            className='inline-flex h-9 items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors border border-input bg-background hover:bg-accent hover:text-accent-foreground'
-          >
-            {onlyMissingSchedules
-              ? '전체 공연 보기'
-              : '스케줄 미등록 공연만 보기'}
+        <div>
+          <Link href={makeUrl({ scheduleStatus: 'all' })}>전체</Link>
+          <Link href={makeUrl({ scheduleStatus: 'registered' })}>
+            스케줄 등록됨
           </Link>
+          <Link href={makeUrl({ scheduleStatus: 'missing' })}>
+            스케줄 미등록
+          </Link>
+        </div>
       </div>
 
       <Separator />
@@ -172,26 +204,36 @@ export default async function AdminList({ searchParams }: Props) {
       )}
 
       {totalPages > 1 && (
-        <nav
-          aria-label="공연 목록 페이지"
-          className="flex items-center justify-center gap-3 pt-4"
-        >
-          <Button asChild variant="outline" disabled={currentPage <= 1}>
-            <Link href={makeUrl({ page: currentPage - 1 })}>이전</Link>
-          </Button>
-
-          <span className="text-sm">
-            {currentPage} / {totalPages}
-          </span>
-
-          <Button
-            asChild
-            variant="outline"
-            disabled={currentPage >= totalPages}
-          >
-            <Link href={makeUrl({ page: currentPage + 1 })}>다음</Link>
-          </Button>
-        </nav>
+        <Pagination>
+          <PaginationContent>
+            {currentPage > 1 && (
+              <PaginationItem>
+                <PaginationPrevious href={makeUrl({ page: currentPage - 1 })} />
+              </PaginationItem>
+            )}
+            {paginationItems.map((item) =>
+              typeof item === 'number' ? (
+                <PaginationItem key={item}>
+                  <PaginationLink
+                    href={makeUrl({ page: item })}
+                    isActive={item === currentPage}
+                  >
+                    {item}
+                  </PaginationLink>
+                </PaginationItem>
+              ) : (
+                <PaginationItem key={item}>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              ),
+            )}
+            {currentPage < totalPages && (
+              <PaginationItem>
+                <PaginationNext href={makeUrl({ page: currentPage + 1 })} />
+              </PaginationItem>
+            )}
+          </PaginationContent>
+        </Pagination>
       )}
     </div>
   );
