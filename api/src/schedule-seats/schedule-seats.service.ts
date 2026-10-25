@@ -207,7 +207,34 @@ async holdSeats(
 }
 
 //선점한 좌석 전체 취소하기(취소버튼으로 동작)
-async releaseHolds(scheduleId: number, guestId: string) {}
+//guestId는 방문자 식별ID (방문자 쿠키 발급 API에서 만들었음)
+//guest.controller
+//guestId 는 DB에 holderId 부분에 저장된다
+async releaseHolds(scheduleId: number, guestId: string) {
+
+  if (scheduleId <1 ){ //양수가 아닌 회차 id가 잘못들어오는것을 방지
+    throw new BadRequestException('올바른 회차 ID가 필요합니다.');
+  }
+
+  const result = await this.prisma.scheduleSeat.updateMany({
+    where: {
+      scheduleId,
+      holderId: guestId, //다른사람의 id를 해제하지않는다.
+      seatStatus:'HOLD',
+    },
+    data: {
+      seatStatus: 'AVAILABLE',
+      holderId: null, 
+      holdExpiresAt:null,
+    }
+  });
+  return {
+    message: '선점 해제 완료.',
+    releasedCount : result.count, //releasedCount는 내가 지은이름
+    //result.count는 result가 몇개인지 알려서 선점해제한 좌석이 몇개인지 안내
+  }
+}
+
 }
 /*SQL 회차 선점예시
 $1 회차ID
