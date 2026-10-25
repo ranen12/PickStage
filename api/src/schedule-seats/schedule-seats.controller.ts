@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, UnauthorizedException, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Req, UnauthorizedException, ValidationPipe } from '@nestjs/common';
 import { ScheduleSeatsService } from './schedule-seats.service';
 import { HoldSeatsDto } from './dto/hold-seats.dto';
 import type { Request } from 'express';
@@ -36,5 +36,18 @@ export class ScheduleSeatsController {
                 dto.scheduleSeatIds,
                 guestId,
             )
+        }
+
+        @Delete(':scheduleId/holds')
+        releaseHolds(
+            @Param('scheduleId', ParseIntPipe) scheduleId: number,
+            @Req() req: Request,
+        ){
+            const guestId = req.signedCookies?.guestId;
+
+            if(typeof guestId !== 'string' || guestId.length === 0){
+                throw new UnauthorizedException('방문자 쿠키가 필요합니다.')
+            }
+            return this.scheduleSeatsService.releaseHolds(scheduleId, guestId);
         }
 }

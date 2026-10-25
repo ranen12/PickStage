@@ -36,6 +36,20 @@ export class ScheduleSeatsService {
             throw new NotFoundException(`공연 회차를 찾을 수 없습니다.`);
     }
 
+    //이 회차에서 시간이 만료된 HOLD를 해제합니다.
+    await this.prisma.scheduleSeat.updateMany({
+      where:{
+        scheduleId, //현재 조회하는 회차에서
+        seatStatus:'HOLD',
+        holdExpiresAt:{lte: new Date()},//만료시각이 new Date() 보다 이전시점이거나 같은경우
+      },
+        data:{ //data를 이렇게 수정하겠음
+          seatStatus:'AVAILABLE',
+          holderId:null,
+          holdExpiresAt:null,
+        },
+      })
+
     //해당 회차id를 가지고 ScheduleSeat 테이블에서 좌석정보를 가져온다.
     //참고: seat는 좌석그자체, scheduleseat는 회차별 좌석이며, seat(좌석)과 stageChedule(공연회차)를 fk하고 있다.
     //scheduleSeat 테이블엔 여러 회차 좌석 정보가 전부 들어있기에 여기서 scheduleId로 해당 회차에 좌석만 가져와야하는것이다.
@@ -107,53 +121,55 @@ async holdSeats(
           }
 
           const now = new Date();
-          const holdExpiresAt = new Date(now.getTime() + 5 * 60 * 1000);
+          const holdExpiresAt = new Date(now.getTime() + 5 * 60 * 1000); //5분뒤시간을 다시 시간객체로 만듬
 
-          if (schedule.startAt <= now) {
+          if (schedule.startAt <= now) { //공연시각이 현재 시간보다 작거나 같다면,
             throw new BadRequestException('이미 시작된 공연입니다.');
           }
 
-          // 같은 방문자가 이 회차에 유효한 선점을 가지고 있는지 확인합니다.
+          //내가 이미 선점한 좌석이 있나 확인
           const existingHold = await tx.scheduleSeat.findFirst({
             where: {
               scheduleId,
               holderId: guestId,
               seatStatus: 'HOLD',
-              holdExpiresAt: { gt: now },
+              holdExpiresAt: { gt: now },//gt는 greater than > 만료시각이 지금보다 미래여야 유효선점
             },
             select: { id: true },
           });
 
           if (existingHold) {
             throw new ConflictException(
-              '이미 선점한 좌석이 있습니다. 예약을 계속하거나 선점을 해제해 주세요.',
+              '이미 선점한 좌석이 있습니다. 예약을 계속하거나 선점을 해제해 주세요.', //이미 선점된 좌석이 있다면 거절, 2개만 예약상태여도 거절해야함.
+              //취소하고 다시 선점(4개까지)는 가능하나 2개 하고 + 2개 더 추가로 하는형태는 거절하도록 했음.
             );
           }
 
-          //선택한 좌석 중 현재 선점 가능한 좌석만 변경합니다.
+          //위에서 선점중인 사람이 아닌게 확인되었으니
+          //원하는 좌석을 HOLD 로 선점함
           const result = await tx.scheduleSeat.updateMany({
             where: {
-              id: { in: scheduleSeatIds },
-              scheduleId,
-              reservationId: null,
-              OR: [
-                { seatStatus: 'AVAILABLE' },
+              id: { in: scheduleSeatIds },//ID가 해당 scheduleIds인 좌석
+              scheduleId,//같은회차
+              reservationId: null,//확정된 예약과 연결되어 있지 않아야함.
+              OR: [ //아래중 하나라도 만족하면 된다.
+                { seatStatus: 'AVAILABLE' }, //비어있는 좌석이거나, 
                 {
-                  seatStatus: 'HOLD',
-                  holdExpiresAt: { lte: now },
+                  seatStatus: 'HOLD', //HOLD 이지만
+                  holdExpiresAt: { lte: now }, //만료시간이 지난 좌석은 선점 가능하도록 만들어야 한다.
                 },
               ],
             },
             data: {
-              seatStatus: 'HOLD',
-              holderId: guestId,
-              holdExpiresAt,
+              seatStatus: 'HOLD', //상태 HOLD
+              holderId: guestId, // 선점자 
+              holdExpiresAt, //만료시각을 계산해서 언제까지 HOLD 한건지 표기함, 해당것을 기준으로 만료된것은 선점가능하도록 변경
             },
           });
 
           //하나라도 변경하지 못했다면 변경롤백
-          if (result.count !== scheduleSeatIds.length) {
-            throw new ConflictException(
+          if (result.count !== scheduleSeatIds.length) { //result.count 변경한 좌석수, scheduleSeatIds.length 요청한 좌석수
+            throw new ConflictException( //throw 가 실행되면 변경했던것도 롤백된다.
               '선점할 수 없는 좌석이 포함되어 있습니다. 좌석을 다시 확인해 주세요.',
             );
           }
@@ -166,11 +182,12 @@ async holdSeats(
           };
         },
         {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        },
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable, //동시에 실행된 트랜잭션 결과를 하나씩 처리한듯이 함
+        }, //만약 내 기존 선점이 있는지 조회> 없다면 새 좌석 선점이라는 규칙이 존재하는데
+        //해당 코드가 없다면 같은 방문자가 서로 다른 좌석으로 요청을 두 번 보낼시 두 요청모두 기존 선점 없음을 볼수있다.
       );
     } catch (error) {
-      //Prisma의 동시 쓰기 충돌/교착 오류만 재시도 P2034 
+      //P2034 은 동시쓰기 충돌, 교착, 트랜잭션 실패 코드
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2034'
@@ -184,12 +201,42 @@ async holdSeats(
         );
       }
 
-      throw error;
+      throw error; //p2034 오류가 아니라면 다시 던진다.
     }
   }
 }
 
-/*SQL 작성 예시
+//선점한 좌석 전체 취소하기(취소버튼으로 동작)
+//guestId는 방문자 식별ID (방문자 쿠키 발급 API에서 만들었음)
+//guest.controller
+//guestId 는 DB에 holderId 부분에 저장된다
+async releaseHolds(scheduleId: number, guestId: string) {
+
+  if (scheduleId <1 ){ //양수가 아닌 회차 id가 잘못들어오는것을 방지
+    throw new BadRequestException('올바른 회차 ID가 필요합니다.');
+  }
+
+  const result = await this.prisma.scheduleSeat.updateMany({
+    where: {
+      scheduleId,
+      holderId: guestId, //다른사람의 id를 해제하지않는다.
+      seatStatus:'HOLD',
+    },
+    data: {
+      seatStatus: 'AVAILABLE',
+      holderId: null, 
+      holdExpiresAt:null,
+    }
+  });
+  return {
+    message: '선점 해제 완료.',
+    releasedCount : result.count, //releasedCount는 내가 지은이름
+    //result.count는 result가 몇개인지 알려서 선점해제한 좌석이 몇개인지 안내
+  }
+}
+
+}
+/*SQL 회차 선점예시
 $1 회차ID
 $2 방문자ID
 $3 선택한 ScheduleSeat.id 배열
@@ -235,6 +282,22 @@ WHERE "scheduleId" =$1
     
     중요한건  서버코드가 하니 SQL은 참고만하자
 */
-}
 
 
+
+/*
+SQL 작성예시 만료한 HOLD를 가능상태로 변경하는 코드
+39번쯤 라인 
+UPDATE "ScheduleSeat"
+SET 
+  "seatStatus" = 'AVAILABLE',
+  "holderId" = NULL,
+  "holdExpiresAt" = NULL,
+  "updatedAt" = CURRENT_TIMESTAMP
+WHERE "scheduleId" = 1
+  AND "seatStatus" = 'HOLD'
+  AND "holdExpiresAt" <= CURRENT_TIMESTAMP;
+
+  >>SET은 변경할값, WHERE은 변경할 대상의 조건, <CURRENT_TIMESTAMP 현재 이전시점, NULL값이 없는 상태
+  >>읽는 순서는, 어떤 좌석을 찾아서, 무엇으로 변경하는가
+*/
