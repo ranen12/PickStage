@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 async function main() {
   // 1. 이미 만들어 둔 기본 좌석을 가져옵니다.
   const seats = await prisma.seat.findMany({
-    where: { venue_name: 'PickStage Hall' },
+    where: { venueName: 'PickStage Hall' },
   });
 
   if (seats.length === 0) {

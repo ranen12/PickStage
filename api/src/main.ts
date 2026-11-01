@@ -1,8 +1,9 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import 'dotenv/config';
 import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common/pipes/validation.pipe';
+//env는 맨 윗줄에 두도록 권장.
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
