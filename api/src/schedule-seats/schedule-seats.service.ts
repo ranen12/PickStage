@@ -9,75 +9,91 @@ export class ScheduleSeatsService {
     constructor(private readonly prisma: PrismaService) {}
 
 
-    async findByschedule(scheduleId: number){
-        logger.info(`findByschedule scheduleId: ${scheduleId}`);
+    //이 회차에서 시간이 만료된 HOLD를 해제하는 updateMany 가 있었으나, 성능문제로 삭제하였음
+   
+    async findByschedule(scheduleId: number, guestId?: string){
+      logger.info(`findByschedule scheduleId: ${scheduleId}, guestId: ${guestId}`);
 
-        //scheduleId는 함수의 매개변수로 전달받은 회차ID
-        //해당 공연회차에 정보를 가져와 schedule 에 담는다.
-        const schedule = await this.prisma.stageSchedule.findUnique({
-            where: { id: scheduleId},
-            select: {
-                id: true,
-                startAt:true,
-                endAt:true,
-                stage:{
-                    select:{
-                        id:true,
-                        title: true,
-                        category:true,
-                        price:true,
-                    }
-                }
+      //scheduleId 는 함수의 매개변수로 전달받은 회차Id
+      //해당 공연회차에 정보를 가져와 schedule 넣음
+      const schedule = await this.prisma.stageSchedule.findUnique({
+        where: {id: scheduleId}, //회차
+        select: {
+          id: true,
+          startAt: true,
+          endAt: true,
+          stage: {
+            select:{
+              id:true,
+              title: true,
+              category:true,
+              price:true,
             }
-        });
+          }
+        }
+      });
+      if(!schedule) {
+        logger.error(`findByschedule scheduleId: ${scheduleId} not found`);
+        throw new NotFoundException(`공연 회차를 찾을 수 없습니다.`)
+      }
+      //만료 여부를 판단할 기준 현재 시각.
+      const now = new Date();
 
-        if(!schedule){
-            logger.error(`findByschedule scheduleId: ${scheduleId} not found`);
-            throw new NotFoundException(`공연 회차를 찾을 수 없습니다.`);
-    }
-
-    //이 회차에서 시간이 만료된 HOLD를 해제합니다.
-    await this.prisma.scheduleSeat.updateMany({
-      where:{
-        scheduleId, //현재 조회하는 회차에서
-        seatStatus:'HOLD',
-        holdExpiresAt:{lte: new Date()},//만료시각이 new Date() 보다 이전시점이거나 같은경우
-      },
-        data:{ //data를 이렇게 수정하겠음
-          seatStatus:'AVAILABLE',
-          holderId:null,
-          holdExpiresAt:null,
-        },
-      })
-
-    //해당 회차id를 가지고 ScheduleSeat 테이블에서 좌석정보를 가져온다.
-    //참고: seat는 좌석그자체, scheduleseat는 회차별 좌석이며, seat(좌석)과 stageChedule(공연회차)를 fk하고 있다.
-    //scheduleSeat 테이블엔 여러 회차 좌석 정보가 전부 들어있기에 여기서 scheduleId로 해당 회차에 좌석만 가져와야하는것이다.
-    const seats = await this.prisma.scheduleSeat.findMany({
+      //해당 회차id를 가지고 ScheduleSeat 테이블에서 좌석 정보를 가져온다(읽기만)
+      const rows = await this.prisma.scheduleSeat.findMany({
         where:{scheduleId},
         select:{
-        id:true, //ScheduleSeat 의 id
-        seatStatus:true, 
-        seat:{ //연결된 Seat의 정보도 가져온다.seat Seat @relation(fields: [seatId], references: [id], onDelete: Restrict) 연결한것
-            select:{ //Seat의 seatCode
-                seatCode:true,
-                rowName:true,
-                seatNumber:true,
-                grade:true,
+          id:true, //ScheduleSeat의 id,
+          seatStatus: true,
+          holderId:true, //내 좌석인지 판단한다(응답에는 내보내면 x)
+          holdExpiresAt:true, //만료 여부 판단용
+          seat:{ //join
+            select:{
+              seatCode:true,
+              rowName:true,
+              seatNumber:true,
+              grade:true,
             }
-        }
+          }
         },
-        orderBy:[ //정렬기준
-            {seat:{rowName:'asc'}}, //첫번째기준: 행이름을 오름차순 정렬
-            {seat:{seatNumber:'asc'}}, //두번재 기준: 좌석넘버 오름차순 정렬
+        orderBy:[
+          {seat:{rowName: 'asc'}},
+          {seat:{seatNumber:'asc'}}
         ],
+      });
 
-    });
-    return{
+      //LAZY 방식: DB값은 그대로 두고, 응답을 만들 때만 만료를 해석
+      //map 을 사용하여 가져온 좌석을 돌면서 응답용 모양으로 만듬. map 은 목록의 항목을 변환하여 새 항목을 만든다
+      const seats = rows.map((row)=>{
+        //유효한 HOLD = HOLD 상태이면서 만료 시각이 아직 미래인경우만 판단, 만료시간이 있다고 전부 HOLD로 판단하지말것
+        const isActiveHold = 
+          row.seatStatus ==='HOLD' &&
+          row.holdExpiresAt !== null &&
+          row.holdExpiresAt > now; //HOLD 상태이면서 만료시각이 아직 미래
+
+          //HOLD 인데 만료되었다면 빈 좌석으로 보여준다(DB엔 HOLD 상태이나 시간을 보고 판단)
+          const status = row.seatStatus === "HOLD" && isActiveHold ? 'AVAILABLE' : row.seatStatus;
+
+          //내가 잡은 좌석인가 확인
+          const isMine =
+            isActiveHold && guestId !== undefined && row.holderId === guestId;
+
+            return {
+              id: row.id,
+              seatStatus: status,
+              isMine,
+              holdExpiresAt: isMine ? row.holdExpiresAt: null, //내 좌석만 알려줌
+              seat: row.seat,
+              //holderId 는 일부러 내보내지 않음.
+
+            }
+      })//map 종료지점
+      return {
         schedule, seats,
+      }
     }
 
-}
+
 /* join하기
 SELECT
   ss."id",

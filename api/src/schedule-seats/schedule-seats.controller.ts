@@ -11,8 +11,15 @@ export class ScheduleSeatsController {
         //GET /schedules/10/seats 형태
         @Get(':scheduleId/seats')
         findBySchedule( //parseIntPipe로 scheduleId를 number로 변환, 숫자로 바꿔지지 않을시 400오류 
-            @Param('scheduleId', ParseIntPipe) scheduleId: number){
-                return this.scheduleSeatsService.findByschedule(scheduleId);
+            @Param('scheduleId', ParseIntPipe) scheduleId: number,
+            @Req() req: Request,
+        ){
+            //쿠키가 있으면 방문자 Id를 꺼냄, 없으면 undefined
+            //조회는 쿠기가 없어도 할 수 있어야 하므로 에러를 던지지 않음.
+            const cookie = req.signedCookies?.guestId;
+            const guestId = typeof cookie ==='string' && cookie.length > 0 ? cookie : undefined;
+            
+                return this.scheduleSeatsService.findByschedule(scheduleId, guestId);
         }
 
         @Post(':scheduleId/holds')
