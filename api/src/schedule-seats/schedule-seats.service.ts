@@ -67,8 +67,8 @@ export class ScheduleSeatsService {
       const seats = rows.map((row)=>{
         //유효한 HOLD = HOLD 상태이면서 만료 시각이 아직 미래인경우만 판단, 만료시간이 있다고 전부 HOLD로 판단하지말것
         const isActiveHold = 
-          row.seatStatus ==='HOLD' &&
-          row.holdExpiresAt !== null &&
+          row.seatStatus ==='HOLD' && //HOLD 상태인지 확인
+          row.holdExpiresAt !== null && //만료시각이 적혀있는 상태
           row.holdExpiresAt > now; //HOLD 상태이면서 만료시각이 아직 미래
 
           //HOLD 인데 만료되었다면 빈 좌석으로 보여준다(DB엔 HOLD 상태이나 시간을 보고 판단)
@@ -249,6 +249,89 @@ async releaseHolds(scheduleId: number, guestId: string) {
     releasedCount : result.count, //releasedCount는 내가 지은이름
     //result.count는 result가 몇개인지 알려서 선점해제한 좌석이 몇개인지 안내
   }
+}
+
+
+/**
+ * 예매확정
+ * 내가 HOLD 한 좌석중 만료되지 않은 좌석만 SOLD 로 바꾸고 예약만들기
+ */
+
+async confirmReservation(scheduleId: number, scheduleSeatIds: number[], customerName: string, customerPhone: string, guestId : string){
+  if(scheduleId < 1){
+    throw new BadRequestException('올바른 회차 ID가 필요합니다.');
+  }
+
+  //하이픈 없애서 저장형식 통일
+  const phone = customerPhone.replace(/-/g, '');
+
+  return this.prisma.$transaction(async (tx) => {
+    //회차 확인 + 가격 가져오기
+    const schedule =await tx.stageSchedule.findUnique({
+      where:{ id: scheduleId},
+      select: {
+        id : true,
+        startAt: true,
+        stage: { select : { price: true }},
+      },
+  });
+
+  if(!schedule){
+    throw new NotFoundException('공연 회차를 찾을 수 없습니다.');
+  }
+
+  const now = new Date(); //현재 시간
+  if(schedule.startAt <= now){
+    throw new BadRequestException('이미 시작된 공연입니다.');
+  }
+
+  //예약 먼저 만들기. (좌석에 reservationId를 넣어야 하므로 예약을 먼저 만들어야한다)
+  //총액은 클라이언트에서 보내주나, 서버에서 따로 계산하기
+  const reservation = await tx.reservation.create({
+    data: {
+      scheduleId,
+      customerName,
+      customerPhone: phone,
+      totalAmount: schedule.stage.price * scheduleSeatIds.length, //총액계산
+    },
+    select: {id:true, reservationNo: true, totalAmount: true},
+  });
+
+  // 조건부 UPDATE: 아래 조건을 모두 만족하는 좌석만 SOLD 로 변경
+  const result = await tx.scheduleSeat.updateMany({
+    where: {
+      id: { in: scheduleSeatIds}, //요청한 좌석중에서
+      scheduleId, //같은회차이고
+      seatStatus: 'HOLD', //HOLD 상태이면서
+      holderId: guestId, //내가 잡은 좌석이고(소유권자)
+      holdExpiresAt: { gt: now}, //만료되지 않은 상태
+      reservation: null, //다른 예약에 연결되지 않은 좌석
+    },
+    data: {
+      seatStatus: 'SOLD', //좌석 상태 변경
+      reservationId: reservation.id,
+      holderId: null, //선점자 해제
+      holdExpiresAt: null //만료시간 해제
+    }
+  });
+  //holdSeats는 조회>판단>변경 두단계로 이루어져 같은 사람이 요청 두개를 보내면 문제가 생길수 있어
+  //Serialializable 로 동시요청을 막았음. ConfirmReservation은 판단과 변경이 UPDATE안에
+  //한번에 WHERE > SET으로 이뤄지니 Serialializable로 막지 않아도 된다.
+
+  //하나라도 바꾸지 못했으면, 전부 롤백한다(만든 예약도 같이 사라진다)
+  if(result.count !== scheduleSeatIds.length){
+    throw new ConflictException(
+      '선점 시간이 만료되었거나 선점하지 않은 좌석이 포함되어 있습니다. 좌석을 다시 선택해주세요'
+    )
+  }
+  
+  return {
+    message: '예매가 완료되었습니다.',
+    reservationNo: reservation.reservationNo, //예약번호
+    totalAmount: reservation.totalAmount, //총액
+    scheduleSeatIds, //예매된 좌석
+  };
+});
 }
 
 }

@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Req, Unauthor
 import { ScheduleSeatsService } from './schedule-seats.service';
 import { HoldSeatsDto } from './dto/hold-seats.dto';
 import type { Request } from 'express';
+import { ConfirmReservationDto } from './dto/confirm-reservation.dto';
 
 @Controller('schedules')
 export class ScheduleSeatsController {
@@ -56,5 +57,28 @@ export class ScheduleSeatsController {
                 throw new UnauthorizedException('방문자 쿠키가 필요합니다.')
             }
             return this.scheduleSeatsService.releaseHolds(scheduleId, guestId);
+        }
+
+        //POST /schedules/10/reservations
+        @Post(':scheduleId/reservations')
+        confirmReservation(
+            @Param('scheduleId', ParseIntPipe) scheduleId: number,
+            @Body() dto: ConfirmReservationDto,
+            @Req() req: Request,
+        ){
+            //확정은 내가 잡은 좌석인지 확인해야하므로 쿠키가 반드시 필요함
+            const guestId = req.signedCookies?.guestId;
+
+            if(typeof guestId !== 'string' || guestId.length === 0){
+                throw new UnauthorizedException('방문자 쿠키가 필요합니다.')
+            }
+
+            return this.scheduleSeatsService.confirmReservation(
+              scheduleId,
+              dto.scheduleSeatIds,
+              dto.customerName,
+              dto.customerPhone,
+              guestId,
+            )
         }
 }
