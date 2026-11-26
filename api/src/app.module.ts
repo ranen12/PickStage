@@ -7,6 +7,7 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { ScheduleSeatsModule } from './schedule-seats/schedule-seats.module';
 import { GuestController } from './guest/guest.controller';
 import { StageModule } from './stage/stage.module';
+import { ScheduleModule } from './schedule/schedule.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { StageModule } from './stage/stage.module';
     CloudinaryModule,
     ScheduleSeatsModule,
     StageModule,
+    ScheduleModule,
   ],
   controllers: [AppController, GuestController],
   providers: [AppService],

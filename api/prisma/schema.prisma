@@ -57,6 +57,7 @@ model StageSchedule {
   stage         Stage          @relation(fields: [stageId], references: [id], onDelete: Restrict)
   scheduleSeats ScheduleSeat[] //이 회차에 속한 좌석 목록
   reservations  Reservation[] //이 회차에 예약목록 관계
+  @@unique([stageId, startAt])
 }
 
 //Stage에 연결할것이고, @relation 은 어느 필드끼리 연결할지 지정한다.
